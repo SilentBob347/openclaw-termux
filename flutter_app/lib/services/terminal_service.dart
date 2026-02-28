@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import '../constants.dart';
+import 'native_bridge.dart';
 
 /// Provides proot shell configuration for the terminal and onboarding screens.
 /// Must match ProcessManager.kt's gateway mode (command_login) exactly.
@@ -24,6 +25,8 @@ class TerminalService {
     final prootPath = '$nativeLibDir/libproot.so';
     final libDir = '$filesDir/lib';
 
+    final storageGranted = await NativeBridge.hasStoragePermission();
+
     return {
       'executable': prootPath,
       'rootfsDir': rootfsDir,
@@ -32,6 +35,7 @@ class TerminalService {
       'homeDir': homeDir,
       'libDir': libDir,
       'nativeLibDir': nativeLibDir,
+      'storageGranted': storageGranted.toString(),
       // Host-side proot env — ONLY proot-specific vars.
       // Do NOT set PROOT_NO_SECCOMP (proot-distro doesn't set it).
       // Do NOT set HOME/TERM/LANG here (those go in guest env via env -i).
@@ -62,7 +66,7 @@ class TerminalService {
     final kernelRelease = '\\Linux\\localhost\\$_fakeKernelRelease'
         '\\$_fakeKernelVersion\\$machine\\localdomain\\-1\\';
 
-    return [
+    final args = <String>[
       // proot-distro command_login style
       '--change-id=0:0',
       '--sysvipc',
@@ -97,6 +101,17 @@ class TerminalService {
       // App-specific binds
       '--bind=${config['configDir']}/resolv.conf:/etc/resolv.conf',
       '--bind=${config['homeDir']}:/root/home',
+    ];
+
+    // Bind-mount shared storage if permission is granted (Termux-style)
+    if (config['storageGranted'] == 'true') {
+      args.addAll([
+        '--bind=/storage:/storage',
+        '--bind=/storage/emulated/0:/sdcard',
+      ]);
+    }
+
+    args.addAll([
       // Clean guest environment via env -i (matching proot-distro).
       // This prevents Android JVM vars (LD_PRELOAD, CLASSPATH, DEX2OAT,
       // ANDROID_ROOT, etc.) from leaking into the proot guest.
@@ -112,7 +127,9 @@ class TerminalService {
       'NODE_OPTIONS=--require /root/.openclaw/bionic-bypass.js',
       '/bin/bash',
       '-l',
-    ];
+    ]);
+
+    return args;
   }
 
   /// Host-side environment map for Pty.start().
