@@ -2,7 +2,8 @@ import 'dart:io';
 import '../models/optional_package.dart';
 import 'native_bridge.dart';
 
-/// Manages SSH server operations inside the proot environment.
+/// Manages SSH server via a native foreground service.
+/// sshd runs in a persistent proot process (not single-shot runInProot).
 class SshService {
   static String? _rootfsDir;
 
@@ -19,57 +20,45 @@ class SshService {
     return File('$rootfs/${OptionalPackage.sshPackage.checkPath}').existsSync();
   }
 
-  /// Check if sshd is currently running inside proot.
+  /// Check if sshd foreground service is running.
   static Future<bool> isSshdRunning() async {
     try {
-      final result = await NativeBridge.runInProot('pgrep -x sshd', timeout: 10);
-      return result.trim().isNotEmpty;
+      return await NativeBridge.isSshdRunning();
     } catch (_) {
       return false;
     }
   }
 
-  /// Generate host keys if they don't exist, then start sshd on [port].
-  /// Default port is 8022 (port 22 requires true root which proot can't provide).
+  /// Start sshd in a persistent proot process via foreground service.
   static Future<void> startSshd({int port = 8022}) async {
-    await NativeBridge.runInProot(
-      'mkdir -p /run/sshd && '
-      'test -f /etc/ssh/ssh_host_rsa_key || ssh-keygen -A && '
-      '/usr/sbin/sshd -p $port',
-      timeout: 30,
-    );
+    await NativeBridge.startSshd(port: port);
   }
 
-  /// Stop all sshd processes.
+  /// Stop the sshd foreground service.
   static Future<void> stopSshd() async {
-    try {
-      await NativeBridge.runInProot('pkill sshd', timeout: 10);
-    } catch (_) {
-      // Already stopped
-    }
+    await NativeBridge.stopSshd();
   }
 
   /// Set the root password inside proot.
   static Future<void> setPassword(String password) async {
-    // Shell-escape the password to prevent injection
-    final escaped = password.replaceAll("'", "'\\''");
-    await NativeBridge.runInProot(
-      "echo 'root:$escaped' | chpasswd",
-      timeout: 15,
-    );
+    await NativeBridge.setRootPassword(password);
   }
 
-  /// Get the device's IP addresses.
+  /// Get device IP addresses from Android NetworkInterface (not proot).
   static Future<List<String>> getIpAddresses() async {
     try {
-      final result = await NativeBridge.runInProot('hostname -I', timeout: 10);
-      return result
-          .trim()
-          .split(RegExp(r'\s+'))
-          .where((ip) => ip.isNotEmpty)
-          .toList();
+      return await NativeBridge.getDeviceIps();
     } catch (_) {
       return [];
+    }
+  }
+
+  /// Get the port sshd is running on.
+  static Future<int> getPort() async {
+    try {
+      return await NativeBridge.getSshdPort();
+    } catch (_) {
+      return 8022;
     }
   }
 }

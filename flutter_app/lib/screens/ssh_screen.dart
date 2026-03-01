@@ -42,8 +42,11 @@ class _SshScreenState extends State<SshScreen> {
     List<String> ips = [];
     if (installed) {
       running = await SshService.isSshdRunning();
+      // Always fetch IPs so user can see them before starting
+      ips = await SshService.getIpAddresses();
       if (running) {
-        ips = await SshService.getIpAddresses();
+        final port = await SshService.getPort();
+        if (mounted) _portController.text = port.toString();
       }
     }
     if (mounted) {
@@ -61,9 +64,13 @@ class _SshScreenState extends State<SshScreen> {
     try {
       if (_running) {
         await SshService.stopSshd();
+        // Give the service a moment to stop
+        await Future.delayed(const Duration(milliseconds: 500));
       } else {
         final port = int.tryParse(_portController.text.trim()) ?? 8022;
         await SshService.startSshd(port: port);
+        // Give the service a moment to start
+        await Future.delayed(const Duration(seconds: 2));
       }
       await _refresh();
     } catch (e) {
@@ -167,7 +174,6 @@ class _SshScreenState extends State<SshScreen> {
 
   Widget _buildInstalledView(ThemeData theme, bool isDark) {
     final port = _portController.text.trim();
-    final iconBg = isDark ? AppColors.darkSurfaceAlt : const Color(0xFFF3F4F6);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -306,12 +312,12 @@ class _SshScreenState extends State<SshScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _infoRow(theme, iconBg, 'User', 'root'),
+                  _infoRow(theme, 'User', 'root'),
                   const Divider(height: 24),
-                  _infoRow(theme, iconBg, 'Port', port),
+                  _infoRow(theme, 'Port', port),
                   if (_ips.isNotEmpty) ...[
                     const Divider(height: 24),
-                    _infoRow(theme, iconBg, 'IP Addresses', _ips.join(', ')),
+                    _infoRow(theme, 'IP Addresses', _ips.join(', ')),
                   ],
                   const Divider(height: 24),
                   Text(
@@ -350,7 +356,7 @@ class _SshScreenState extends State<SshScreen> {
     );
   }
 
-  Widget _infoRow(ThemeData theme, Color iconBg, String label, String value) {
+  Widget _infoRow(ThemeData theme, String label, String value) {
     return Row(
       children: [
         Expanded(
