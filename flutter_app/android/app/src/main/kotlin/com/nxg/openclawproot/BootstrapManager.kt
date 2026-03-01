@@ -1213,16 +1213,18 @@ require('/root/.openclaw/proot-compat.js');
     }
 
     fun writeResolvConf() {
-        // Ensure the config directory exists. Use context.filesDir as the
-        // canonical base (Android always ensures it exists) rather than
-        // relying solely on the String path, which may point to a directory
-        // that was cleared during an app upgrade. (#40)
-        val dir = File(context.filesDir, "config")
-        if (!dir.exists()) {
+        val content = "nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
+        // Try context.filesDir first (Android-guaranteed), fall back to
+        // string-based configDir. Always call mkdirs() unconditionally. (#40)
+        try {
+            val dir = File(context.filesDir, "config")
             dir.mkdirs()
+            File(dir, "resolv.conf").writeText(content)
+        } catch (_: Exception) {
+            // Fallback: use the string-based path
+            File(configDir).mkdirs()
+            File(configDir, "resolv.conf").writeText(content)
         }
-        val resolv = File(dir, "resolv.conf")
-        resolv.writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
     }
 
     /** Read a file from inside the rootfs (e.g. /root/.openclaw/openclaw.json). */

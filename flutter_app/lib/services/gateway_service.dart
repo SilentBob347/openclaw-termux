@@ -140,9 +140,9 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
 
     try {
       // Ensure directories exist — Android may have cleared them (#40).
-      await NativeBridge.setupDirs();
-      // Refresh resolv.conf before every start so DNS always works.
-      await NativeBridge.writeResolv();
+      // Non-fatal: the GatewayService foreground service also creates them.
+      try { await NativeBridge.setupDirs(); } catch (_) {}
+      try { await NativeBridge.writeResolv(); } catch (_) {}
       await _writeNodeAllowConfig();
       await NativeBridge.startGateway();
       _subscribeLogs();
