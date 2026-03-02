@@ -98,7 +98,9 @@ class AiProvider {
     defaultModels: [
       'meta/llama-3.1-405b-instruct',
       'meta/llama-3.1-70b-instruct',
+      'meta/llama-3.3-70b-instruct',
       'nvidia/nemotron-4-340b-instruct',
+      'deepseek-ai/deepseek-r1',
     ],
     apiKeyHint: 'nvapi-...',
   );

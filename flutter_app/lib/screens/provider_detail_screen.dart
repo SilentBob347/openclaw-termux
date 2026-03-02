@@ -21,28 +21,43 @@ class ProviderDetailScreen extends StatefulWidget {
 }
 
 class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
+  static const _customModelSentinel = '__custom__';
+
   late final TextEditingController _apiKeyController;
+  late final TextEditingController _customModelController;
   late String _selectedModel;
+  bool _isCustomModel = false;
   bool _obscureKey = true;
   bool _saving = false;
   bool _removing = false;
 
   bool get _isConfigured => widget.existingApiKey != null && widget.existingApiKey!.isNotEmpty;
 
+  /// Returns the effective model name to save.
+  String get _effectiveModel =>
+      _isCustomModel ? _customModelController.text.trim() : _selectedModel;
+
   @override
   void initState() {
     super.initState();
     _apiKeyController = TextEditingController(text: widget.existingApiKey ?? '');
-    _selectedModel = widget.existingModel ?? widget.provider.defaultModels.first;
-    // If existing model isn't in the default list, still keep it selected
-    if (!widget.provider.defaultModels.contains(_selectedModel)) {
-      _selectedModel = widget.provider.defaultModels.first;
+    _customModelController = TextEditingController();
+
+    final existing = widget.existingModel ?? widget.provider.defaultModels.first;
+    if (widget.provider.defaultModels.contains(existing)) {
+      _selectedModel = existing;
+    } else {
+      // Existing model is not in the predefined list — treat as custom
+      _selectedModel = _customModelSentinel;
+      _isCustomModel = true;
+      _customModelController.text = existing;
     }
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _customModelController.dispose();
     super.dispose();
   }
 
@@ -54,13 +69,20 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       );
       return;
     }
+    final model = _effectiveModel;
+    if (model.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Model name cannot be empty')),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
       await ProviderConfigService.saveProviderConfig(
         provider: widget.provider,
         apiKey: apiKey,
-        model: _selectedModel,
+        model: model,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -202,13 +224,33 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
             value: _selectedModel,
             isExpanded: true,
             decoration: const InputDecoration(),
-            items: widget.provider.defaultModels
-                .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                .toList(),
+            items: [
+              ...widget.provider.defaultModels
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m))),
+              const DropdownMenuItem(
+                value: _customModelSentinel,
+                child: Text('Custom...'),
+              ),
+            ],
             onChanged: (value) {
-              if (value != null) setState(() => _selectedModel = value);
+              if (value != null) {
+                setState(() {
+                  _selectedModel = value;
+                  _isCustomModel = value == _customModelSentinel;
+                });
+              }
             },
           ),
+          if (_isCustomModel) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customModelController,
+              decoration: const InputDecoration(
+                hintText: 'e.g. meta/llama-3.3-70b-instruct',
+                labelText: 'Custom model name',
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
 
           // Actions

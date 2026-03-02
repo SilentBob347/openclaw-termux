@@ -54,7 +54,8 @@ class ProviderConfigService {
   }
 
   /// Save a provider's API key and set its model as the active model.
-  /// Uses a Node.js one-liner to safely merge into existing openclaw.json.
+  /// Tries a Node.js one-liner in proot first, then falls back to a direct
+  /// file write via NativeBridge.writeRootfsFile if proot/DNS is unavailable.
   static Future<void> saveProviderConfig({
     required AiProvider provider,
     required String apiKey,
@@ -82,10 +83,55 @@ c.agents.defaults.model.primary = $modelJson;
 fs.mkdirSync(require("path").dirname(p), { recursive: true });
 fs.writeFileSync(p, JSON.stringify(c, null, 2));
 ''';
-    await NativeBridge.runInProot(
-      'node -e ${_shellEscape(script)}',
-      timeout: 15,
-    );
+    try {
+      await NativeBridge.runInProot(
+        'node -e ${_shellEscape(script)}',
+        timeout: 15,
+      );
+    } catch (_) {
+      // Fallback: write config directly via NativeBridge file I/O
+      await _saveConfigDirect(
+        providerId: provider.id,
+        apiKey: apiKey,
+        baseUrl: provider.baseUrl,
+        model: model,
+      );
+    }
+  }
+
+  /// Direct file-write fallback that doesn't depend on proot or DNS.
+  static Future<void> _saveConfigDirect({
+    required String providerId,
+    required String apiKey,
+    required String baseUrl,
+    required String model,
+  }) async {
+    Map<String, dynamic> config = {};
+    try {
+      final content = await NativeBridge.readRootfsFile(_configPath);
+      if (content != null && content.isNotEmpty) {
+        config = jsonDecode(content) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      // Start fresh
+    }
+
+    // Merge provider entry
+    config['models'] ??= <String, dynamic>{};
+    (config['models'] as Map<String, dynamic>)['providers'] ??= <String, dynamic>{};
+    ((config['models'] as Map<String, dynamic>)['providers'] as Map<String, dynamic>)[providerId] = {
+      'apiKey': apiKey,
+      'baseUrl': baseUrl,
+    };
+
+    // Set active model
+    config['agents'] ??= <String, dynamic>{};
+    (config['agents'] as Map<String, dynamic>)['defaults'] ??= <String, dynamic>{};
+    ((config['agents'] as Map<String, dynamic>)['defaults'] as Map<String, dynamic>)['model'] ??= <String, dynamic>{};
+    (((config['agents'] as Map<String, dynamic>)['defaults'] as Map<String, dynamic>)['model'] as Map<String, dynamic>)['primary'] = model;
+
+    const encoder = JsonEncoder.withIndent('  ');
+    await NativeBridge.writeRootfsFile(_configPath, encoder.convert(config));
   }
 
   /// Remove a provider's config entry and clear the active model if it
