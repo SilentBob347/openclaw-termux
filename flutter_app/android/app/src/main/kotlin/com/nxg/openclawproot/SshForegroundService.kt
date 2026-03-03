@@ -110,11 +110,20 @@ class SshForegroundService : Service() {
                 try { bootstrapManager.writeResolvConf() } catch (_: Exception) {}
 
                 // Last-resort: verify resolv.conf exists, create inline if not
+                val resolvContent = "nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
                 try {
                     val resolvFile = File(filesDir, "config/resolv.conf")
                     if (!resolvFile.exists() || resolvFile.length() == 0L) {
                         resolvFile.parentFile?.mkdirs()
-                        resolvFile.writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
+                        resolvFile.writeText(resolvContent)
+                    }
+                } catch (_: Exception) {}
+                // Also write into rootfs /etc/ so DNS works even if bind-mount fails
+                try {
+                    val rootfsResolv = File(filesDir, "rootfs/ubuntu/etc/resolv.conf")
+                    if (!rootfsResolv.exists() || rootfsResolv.length() == 0L) {
+                        rootfsResolv.parentFile?.mkdirs()
+                        rootfsResolv.writeText(resolvContent)
                     }
                 } catch (_: Exception) {}
 

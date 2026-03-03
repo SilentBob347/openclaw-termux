@@ -47,10 +47,17 @@ class GatewayService {
     // Dart dart:io fallback if native calls failed (#40).
     try {
       final filesDir = await NativeBridge.getFilesDir();
+      const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
       final resolvFile = File('$filesDir/config/resolv.conf');
       if (!resolvFile.existsSync()) {
         Directory('$filesDir/config').createSync(recursive: true);
-        resolvFile.writeAsStringSync('nameserver 8.8.8.8\nnameserver 8.8.4.4\n');
+        resolvFile.writeAsStringSync(resolvContent);
+      }
+      // Also write into rootfs /etc/ so DNS works even if bind-mount fails
+      final rootfsResolv = File('$filesDir/rootfs/ubuntu/etc/resolv.conf');
+      if (!rootfsResolv.existsSync()) {
+        rootfsResolv.parent.createSync(recursive: true);
+        rootfsResolv.writeAsStringSync(resolvContent);
       }
     } catch (_) {}
 
@@ -156,10 +163,17 @@ fs.writeFileSync(p, JSON.stringify(c, null, 2));
       // Dart dart:io fallback if native calls failed (#40).
       try {
         final filesDir = await NativeBridge.getFilesDir();
+        const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
         final resolvFile = File('$filesDir/config/resolv.conf');
         if (!resolvFile.existsSync()) {
           Directory('$filesDir/config').createSync(recursive: true);
-          resolvFile.writeAsStringSync('nameserver 8.8.8.8\nnameserver 8.8.4.4\n');
+          resolvFile.writeAsStringSync(resolvContent);
+        }
+        // Also write into rootfs /etc/ so DNS works even if bind-mount fails
+        final rootfsResolv = File('$filesDir/rootfs/ubuntu/etc/resolv.conf');
+        if (!rootfsResolv.existsSync()) {
+          rootfsResolv.parent.createSync(recursive: true);
+          rootfsResolv.writeAsStringSync(resolvContent);
         }
       } catch (_) {}
       await _writeNodeAllowConfig();

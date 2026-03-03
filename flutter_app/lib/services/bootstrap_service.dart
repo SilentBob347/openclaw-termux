@@ -67,12 +67,19 @@ class BootstrapService {
       final filesDir = await NativeBridge.getFilesDir();
 
       // Direct Dart fallback: ensure config dir + resolv.conf exist (#40).
+      const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
       try {
         final configDir = '$filesDir/config';
         final resolvFile = File('$configDir/resolv.conf');
         if (!resolvFile.existsSync()) {
           Directory(configDir).createSync(recursive: true);
-          resolvFile.writeAsStringSync('nameserver 8.8.8.8\nnameserver 8.8.4.4\n');
+          resolvFile.writeAsStringSync(resolvContent);
+        }
+        // Also write into rootfs /etc/ so DNS works even if bind-mount fails
+        final rootfsResolv = File('$filesDir/rootfs/ubuntu/etc/resolv.conf');
+        if (!rootfsResolv.existsSync()) {
+          rootfsResolv.parent.createSync(recursive: true);
+          rootfsResolv.writeAsStringSync(resolvContent);
         }
       } catch (_) {}
       final tarPath = '$filesDir/tmp/ubuntu-rootfs.tar.gz';

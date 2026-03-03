@@ -1225,6 +1225,16 @@ require('/root/.openclaw/proot-compat.js');
             File(configDir).mkdirs()
             File(configDir, "resolv.conf").writeText(content)
         }
+
+        // Also write directly into rootfs /etc/resolv.conf so DNS works
+        // even if the bind-mount fails or hasn't been set up yet (#40).
+        try {
+            val rootfsResolv = File(rootfsDir, "etc/resolv.conf")
+            if (!rootfsResolv.exists() || rootfsResolv.length() == 0L) {
+                rootfsResolv.parentFile?.mkdirs()
+                rootfsResolv.writeText(content)
+            }
+        } catch (_: Exception) {}
     }
 
     /** Read a file from inside the rootfs (e.g. /root/.openclaw/openclaw.json). */

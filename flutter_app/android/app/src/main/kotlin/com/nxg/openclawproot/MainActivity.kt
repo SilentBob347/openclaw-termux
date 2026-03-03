@@ -49,6 +49,13 @@ class MainActivity : FlutterActivity() {
         bootstrapManager = BootstrapManager(applicationContext, filesDir, nativeLibDir)
         processManager = ProcessManager(filesDir, nativeLibDir)
 
+        // Ensure directories and resolv.conf exist on every app start.
+        // Android may clear filesDir during APK update (#40).
+        Thread {
+            try { bootstrapManager.setupDirectories() } catch (_: Exception) {}
+            try { bootstrapManager.writeResolvConf() } catch (_: Exception) {}
+        }.start()
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getProotPath" -> {

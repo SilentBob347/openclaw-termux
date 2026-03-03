@@ -36,11 +36,20 @@ class TerminalService {
 
     // Direct Dart fallback: create resolv.conf if it still doesn't exist
     // after the native method channel calls (#40).
+    const resolvContent = 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n';
     try {
       final resolvFile = File('$configDir/resolv.conf');
       if (!resolvFile.existsSync()) {
         Directory(configDir).createSync(recursive: true);
-        resolvFile.writeAsStringSync('nameserver 8.8.8.8\nnameserver 8.8.4.4\n');
+        resolvFile.writeAsStringSync(resolvContent);
+      }
+    } catch (_) {}
+    // Also write into rootfs /etc/ so DNS works even if bind-mount fails
+    try {
+      final rootfsResolv = File('$rootfsDir/etc/resolv.conf');
+      if (!rootfsResolv.existsSync()) {
+        rootfsResolv.parent.createSync(recursive: true);
+        rootfsResolv.writeAsStringSync(resolvContent);
       }
     } catch (_) {}
 
