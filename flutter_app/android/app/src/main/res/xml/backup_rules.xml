@@ -2,5 +2,4 @@
 <!-- fullBackupContent rules for Android ≤11 -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
-    <exclude domain="file" path="rootfs/" />
 </full-backup-content>

@@ -3,10 +3,8 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="." />
-        <exclude domain="file" path="rootfs/" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
-        <exclude domain="file" path="rootfs/" />
     </device-transfer>
 </data-extraction-rules>
