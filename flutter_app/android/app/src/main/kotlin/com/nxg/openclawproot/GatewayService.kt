@@ -8,7 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import io.flutter.plugin.common.EventChannel
 import java.io.BufferedReader
@@ -25,27 +27,20 @@ class GatewayService : Service() {
             private set
         var logSink: EventChannel.EventSink? = null
         private var instance: GatewayService? = null
+        private val mainHandler = Handler(Looper.getMainLooper())
 
-        /** Check if the gateway process is actually alive (not just the flag). */
+        /** Check if the gateway process is actually alive (not just the flag).
+         *  Safe to call from the main thread — no blocking I/O. */
         fun isProcessAlive(): Boolean {
             val inst = instance ?: return false
             if (!isRunning) return false
             val proc = inst.gatewayProcess
             // If we have a process reference, check if it's actually alive
             if (proc != null) return proc.isAlive
-            // No process ref yet — could still be in setup phase.
-            // Check if port is responding as a fallback.
-            return try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress("127.0.0.1", 18789), 1000)
-                    true
-                }
-            } catch (_: Exception) {
-                // Process not yet spawned but service is running — report true
-                // only if we're still within the startup window (30s)
-                val elapsed = System.currentTimeMillis() - inst.startTime
-                elapsed < 30_000
-            }
+            // No process ref yet — still in setup phase.
+            // Report alive if within startup window (45s covers dir setup + proot spawn)
+            val elapsed = System.currentTimeMillis() - inst.startTime
+            return elapsed < 45_000
         }
 
         fun start(context: Context) {
@@ -154,6 +149,7 @@ class GatewayService : Service() {
                 val bootstrapManager = BootstrapManager(applicationContext, filesDir, nativeLibDir)
                 try {
                     bootstrapManager.setupDirectories()
+                    emitLog("[INFO] Directories ready")
                 } catch (e: Exception) {
                     emitLog("[WARN] setupDirectories failed: ${e.message}")
                 }
@@ -204,12 +200,13 @@ class GatewayService : Service() {
                     gatewayProcess = pm.startProotProcess("openclaw gateway --verbose")
                 }
                 updateNotificationRunning()
-                emitLog("[INFO] Gateway process spawned (pid pending)")
+                emitLog("[INFO] Gateway process spawned")
                 startUptimeTicker()
                 startWatchdog()
 
                 // Read stdout
-                val stdoutReader = BufferedReader(InputStreamReader(gatewayProcess!!.inputStream))
+                val proc = gatewayProcess!!
+                val stdoutReader = BufferedReader(InputStreamReader(proc.inputStream))
                 Thread {
                     try {
                         var line: String?
@@ -221,7 +218,7 @@ class GatewayService : Service() {
                 }.start()
 
                 // Read stderr — log all lines on first attempt for debugging visibility
-                val stderrReader = BufferedReader(InputStreamReader(gatewayProcess!!.errorStream))
+                val stderrReader = BufferedReader(InputStreamReader(proc.errorStream))
                 val currentRestartCount = restartCount
                 Thread {
                     try {
@@ -236,7 +233,7 @@ class GatewayService : Service() {
                     } catch (_: Exception) {}
                 }.start()
 
-                val exitCode = gatewayProcess!!.waitFor()
+                val exitCode = proc.waitFor()
                 val uptimeMs = System.currentTimeMillis() - processStartTime
                 val uptimeSec = uptimeMs / 1000
                 emitLog("[INFO] Gateway exited with code $exitCode (uptime: ${uptimeSec}s)")
@@ -350,10 +347,17 @@ class GatewayService : Service() {
         updateNotification("Running on port 18789 \u2022 ${formatUptime()}")
     }
 
+    /** Emit a log message to the Flutter EventChannel.
+     *  MUST post to main thread — EventSink.success() is not thread-safe. */
     private fun emitLog(message: String) {
         try {
             val ts = java.time.Instant.now().toString()
-            logSink?.success("$ts $message")
+            val formatted = "$ts $message"
+            mainHandler.post {
+                try {
+                    logSink?.success(formatted)
+                } catch (_: Exception) {}
+            }
         } catch (_: Exception) {}
     }
 
