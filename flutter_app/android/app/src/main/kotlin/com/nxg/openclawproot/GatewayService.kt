@@ -38,9 +38,13 @@ class GatewayService : Service() {
             // If we have a process reference, check if it's actually alive
             if (proc != null) return proc.isAlive
             // No process ref yet — still in setup phase.
-            // Report alive if within startup window (45s covers dir setup + proot spawn)
+            // If the gateway thread is alive, setup is ongoing — report true.
+            // This covers slow devices where dir setup takes a long time.
+            val thread = inst.gatewayThread
+            if (thread != null && thread.isAlive) return true
+            // Fallback: within startup window (120s)
             val elapsed = System.currentTimeMillis() - inst.startTime
-            return elapsed < 45_000
+            return elapsed < 120_000
         }
 
         fun start(context: Context) {
@@ -66,6 +70,7 @@ class GatewayService : Service() {
     private var processStartTime: Long = 0
     private var uptimeThread: Thread? = null
     private var watchdogThread: Thread? = null
+    private var gatewayThread: Thread? = null
     private val lock = Object()
     @Volatile private var stopping = false
 
@@ -117,27 +122,23 @@ class GatewayService : Service() {
             if (stopping) return
             if (gatewayProcess?.isAlive == true) return
 
-            // Check if an existing gateway is already listening on the port.
-            // This prevents duplicate instances when the service is recreated
-            // but an old proot process is still alive (#60).
-            if (isPortInUse()) {
-                emitLog("Gateway already running on port 18789, adopting existing instance")
-                isRunning = true
-                instance = this
-                startTime = System.currentTimeMillis()
-                updateNotificationRunning()
-                startUptimeTicker()
-                startWatchdog()
-                return
-            }
-
             isRunning = true
             instance = this
             startTime = System.currentTimeMillis()
         }
 
-        Thread {
+        gatewayThread = Thread {
             try {
+                // Check if an existing gateway is already listening on the port.
+                // Moved inside thread to avoid blocking the main thread (#60).
+                if (isPortInUse()) {
+                    emitLog("[INFO] Gateway already running on port 18789, adopting existing instance")
+                    updateNotificationRunning()
+                    startUptimeTicker()
+                    startWatchdog()
+                    return@Thread
+                }
+
                 emitLog("[INFO] Setting up environment...")
                 val filesDir = applicationContext.filesDir.absolutePath
                 val nativeLibDir = applicationContext.applicationInfo.nativeLibraryDir
@@ -269,7 +270,7 @@ class GatewayService : Service() {
                     updateNotification("Gateway error")
                 }
             }
-        }.start()
+        }.also { it.start() }
     }
 
     private fun stopGateway() {
