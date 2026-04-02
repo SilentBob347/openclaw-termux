@@ -98,6 +98,11 @@ class NativeBridge {
     return await _channel.invokeMethod('isNodeServiceRunning');
   }
 
+  static Future<Map<String, dynamic>> getBatteryStatus() async {
+    final result = await _channel.invokeMethod('getBatteryStatus');
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   static Future<bool> updateNodeNotification(String text) async {
     return await _channel.invokeMethod('updateNodeNotification', {'text': text});
   }

@@ -7,10 +7,12 @@ import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.BatteryManager
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
@@ -231,6 +233,60 @@ class MainActivity : FlutterActivity() {
                 "isBatteryOptimized" -> {
                     val pm = getSystemService(POWER_SERVICE) as PowerManager
                     result.success(!pm.isIgnoringBatteryOptimizations(packageName))
+                }
+                "getBatteryStatus" -> {
+                    try {
+                        val batteryIntent =
+                            registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                        if (batteryIntent == null) {
+                            result.error("BATTERY_ERROR", "Battery status unavailable", null)
+                            return@setMethodCallHandler
+                        }
+
+                        val level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                        val scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                        val temperature =
+                            batteryIntent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                        val voltage = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+                        val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                        val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+
+                        val percentage =
+                            if (level >= 0 && scale > 0) ((level * 100f) / scale).toInt() else -1
+
+                        val statusText = when (status) {
+                            BatteryManager.BATTERY_STATUS_CHARGING -> "CHARGING"
+                            BatteryManager.BATTERY_STATUS_DISCHARGING -> "DISCHARGING"
+                            BatteryManager.BATTERY_STATUS_FULL -> "FULL"
+                            BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "NOT_CHARGING"
+                            else -> "UNKNOWN"
+                        }
+
+                        val pluggedText = when {
+                            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "AC"
+                            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "USB"
+                            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "WIRELESS"
+                            else -> "UNPLUGGED"
+                        }
+
+                        val data = hashMapOf<String, Any>(
+                            "percentage" to percentage,
+                            "level" to level,
+                            "scale" to scale,
+                            "status" to statusText,
+                            "plugged" to pluggedText,
+                            "isCharging" to (
+                                status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                                    status == BatteryManager.BATTERY_STATUS_FULL
+                                ),
+                            "temperatureC" to if (temperature >= 0) temperature / 10.0 else -1.0,
+                            "voltageMv" to voltage,
+                        )
+
+                        result.success(data)
+                    } catch (e: Exception) {
+                        result.error("BATTERY_ERROR", e.message, null)
+                    }
                 }
                 "setupDirs" -> {
                     Thread {

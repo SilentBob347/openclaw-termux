@@ -5,6 +5,7 @@ import '../models/gateway_state.dart';
 import '../models/node_state.dart';
 import '../services/capabilities/camera_capability.dart';
 import '../services/capabilities/canvas_capability.dart';
+import '../services/capabilities/battery_capability.dart';
 import '../services/capabilities/flash_capability.dart';
 import '../services/capabilities/location_capability.dart';
 import '../services/capabilities/screen_capability.dart';
@@ -26,6 +27,7 @@ class NodeProvider extends ChangeNotifier with WidgetsBindingObserver {
   // Capabilities
   final _cameraCapability = CameraCapability();
   final _canvasCapability = CanvasCapability();
+  final _batteryCapability = BatteryCapability();
   final _flashCapability = FlashCapability();
   final _locationCapability = LocationCapability();
   final _screenCapability = ScreenCapability();
@@ -134,6 +136,11 @@ class NodeProvider extends ChangeNotifier with WidgetsBindingObserver {
       _canvasCapability.name,
       _canvasCapability.commands.map((c) => '${_canvasCapability.name}.$c').toList(),
       (cmd, params) => _canvasCapability.handle(cmd, params),
+    );
+    _nodeService.registerCapability(
+      _batteryCapability.name,
+      _batteryCapability.commands.map((c) => '${_batteryCapability.name}.$c').toList(),
+      (cmd, params) => _batteryCapability.handle(cmd, params),
     );
     _nodeService.registerCapability(
       _locationCapability.name,

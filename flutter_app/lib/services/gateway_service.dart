@@ -127,6 +127,7 @@ class GatewayService {
       'canvas.navigate', 'canvas.eval', 'canvas.snapshot',
       'flash.on', 'flash.off', 'flash.toggle', 'flash.status',
       'location.get',
+      'battery.status',
       'screen.record',
       'sensor.read', 'sensor.list',
       'haptic.vibrate',
